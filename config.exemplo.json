@@ -1,0 +1,10 @@
+{
+  "modo_resposta": "privado",
+  "grupos": false,
+  "limite_palavras_resumo": 60,
+  "resumo": true,
+  "modelo_whisper": "ggml-small.bin",
+  "modelo_resumo": "qwen2.5-3b-instruct-q4_k_m.gguf",
+  "idade_maxima_horas": 12,
+  "porta_painel": 3210
+}

@@ -1,0 +1,21 @@
+{
+  "name": "transcreve-zap",
+  "version": "0.1.0",
+  "description": "Transcreve e resume áudios do WhatsApp no seu próprio computador, sem nuvem.",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "baileys": "7.0.0-rc14",
+    "ffmpeg-static": "5.3.0",
+    "pino": "10.4.0",
+    "qrcode": "1.5.4"
+  }
+}
