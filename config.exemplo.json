@@ -1,7 +1,7 @@
 {
-  "modo_resposta": "privado",
+  "modo_resposta": "conversa",
   "grupos": false,
-  "limite_palavras_resumo": 60,
+  "limite_palavras_resumo": 10,
   "resumo": true,
   "modelo_whisper": "ggml-small.bin",
   "modelo_resumo": "qwen2.5-3b-instruct-q4_k_m.gguf",

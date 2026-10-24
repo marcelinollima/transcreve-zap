@@ -4,18 +4,17 @@ Transcreve os áudios que você recebe no WhatsApp e, quando o áudio é longo,
 manda também um resumo. Tudo roda **no seu computador**: o áudio não vai para
 nenhum servidor, não precisa de conta em serviço de IA nem de VPS.
 
-O texto chega em **"Mensagens para mim"** (a conversa com o seu próprio número),
-então quem mandou o áudio não vê nada. Se preferir, dá para responder na
-própria conversa, citando o áudio.
+A transcrição chega na própria conversa, respondendo ao áudio. Quem mandou o
+áudio também vê, e muita gente acha bom: é assim que os amigos descobrem que
+dá para fazer isso. Se preferir que só você veja, dá para mandar tudo para
+**"Mensagens para mim"** (veja `modo_resposta` abaixo).
 
 ```
-🎙️ Áudio de Ana
+🤖 Transcrição automática do áudio
+Oi, tudo bem? Então, deixa eu te falar, aquela reunião de sexta...
 
 Resumo
-A reunião de sexta passou para as 15h; ela pede que você leve o contrato impresso.
-
-Transcrição
-Oi, tudo bem? Então, deixa eu te falar, aquela reunião de sexta...
+Ana avisa que a reunião de sexta passou para as 15h e pede que você leve o contrato impresso.
 ```
 
 ## Requisitos
@@ -52,9 +51,9 @@ Edite `config.json` e reinicie o programa (`parar.ps1`, depois `iniciar-oculto.v
 
 | Opção | Padrão | O que faz |
 |---|---|---|
-| `modo_resposta` | `"privado"` | `"privado"` manda para "Mensagens para mim"; `"conversa"` responde no chat, citando o áudio (o contato vê) |
+| `modo_resposta` | `"conversa"` | `"conversa"` responde no chat, citando o áudio (o contato vê); `"privado"` manda para "Mensagens para mim" |
 | `grupos` | `false` | Transcrever áudios de grupos |
-| `limite_palavras_resumo` | `60` | Só resume quando a transcrição passa disso |
+| `limite_palavras_resumo` | `10` | Só resume quando a transcrição passa disso |
 | `resumo` | `true` | Liga/desliga o resumo |
 | `idade_maxima_horas` | `12` | Ignora áudios mais antigos que isso (ex.: chegaram com o PC desligado) |
 | `porta_painel` | `3210` | Porta da página local `http://localhost:3210` |
@@ -77,8 +76,8 @@ consegue ler suas mensagens, então não compartilhe.
 
 O Baileys não é uma API oficial do WhatsApp. O uso vai contra os termos de
 serviço do WhatsApp e existe risco de o número ser bloqueado. Este programa só
-lê áudios e manda mensagens para você mesmo (no modo padrão), o que reduz o
-risco, mas não o elimina. Use por sua conta.
+lê áudios e responde a eles, sem disparar mensagens para ninguém, o que reduz
+o risco, mas não o elimina. Use por sua conta.
 
 Os áudios são de outras pessoas. Tudo fica no seu computador, mas use com bom senso.
 

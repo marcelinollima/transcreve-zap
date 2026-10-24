@@ -16,13 +16,13 @@ export const LLAMA_EXE = path.join(RAIZ, 'ferramentas', 'llama', 'llama-server.e
 export const PASTA_MODELOS = path.join(RAIZ, 'modelos')
 
 const PADRAO = {
-  // "privado": manda a transcrição só para você, em "Mensagens para mim".
   // "conversa": responde na própria conversa, citando o áudio (o contato vê).
-  modo_resposta: 'privado',
+  // "privado": manda a transcrição só para você, em "Mensagens para mim".
+  modo_resposta: 'conversa',
   // Transcrever áudios recebidos em grupos.
   grupos: false,
   // Só gera resumo quando a transcrição passa deste número de palavras.
-  limite_palavras_resumo: 60,
+  limite_palavras_resumo: 10,
   // Liga/desliga o resumo (a transcrição continua).
   resumo: true,
   modelo_whisper: 'ggml-small.bin',

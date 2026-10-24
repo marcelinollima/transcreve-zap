@@ -10,8 +10,37 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+
+# Aberto a partir do PowerShell 7, o 5.1 herda o PSModulePath do 7 e carrega
+# módulos incompatíveis. Volta para os caminhos do próprio Windows PowerShell.
+if ($PSVersionTable.PSVersion.Major -lt 6) {
+    $env:PSModulePath = @(
+        (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'WindowsPowerShell\Modules'),
+        (Join-Path $env:ProgramFiles 'WindowsPowerShell\Modules'),
+        (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\Modules')
+    ) -join ';'
+}
 $Raiz = $PSScriptRoot
 Set-Location $Raiz
+
+# Trava: só uma instalação por vez. Rodar duas juntas corrompe as bibliotecas.
+$Dados = Join-Path $Raiz 'dados'
+New-Item -ItemType Directory -Force $Dados | Out-Null
+$Trava = Join-Path $Dados 'instalando.lock'
+$Progresso = Join-Path $Dados 'instalacao.txt'
+if (Test-Path $Trava) {
+    $outro = (Get-Content $Trava -Raw).Trim()
+    if ($outro -and (Get-Process -Id $outro -ErrorAction SilentlyContinue)) {
+        Write-Host "Já existe uma instalação em andamento (processo $outro)." -ForegroundColor Yellow
+        Write-Host "Acompanhe em $Progresso. Não rode o instalador de novo enquanto ela não terminar."
+        exit 2
+    }
+}
+Set-Content $Trava $PID
+
+function Progresso($texto) {
+    Set-Content $Progresso "$texto`r`n(atualizado em $(Get-Date -Format 'dd/MM/yyyy HH:mm:ss'))" -Encoding UTF8
+}
 
 # Versões fixas, conferidas pelo SHA-256. Atualizar aqui quando mudar.
 $Downloads = @{
@@ -23,17 +52,30 @@ $Downloads = @{
     qwen    = @{ url = 'https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/main/qwen2.5-3b-instruct-q4_k_m.gguf'; sha = '626B4A6678B86442240E33DF819E00132D3BA7DDDFE1CDC4FBB18E0A9615C62D'; arquivo = 'qwen2.5-3b-instruct-q4_k_m.gguf' }
 }
 
-function Passo($texto) { Write-Host "`n==> $texto" -ForegroundColor Cyan }
+function Passo($texto) {
+    Write-Host "`n==> $texto" -ForegroundColor Cyan
+    Progresso "EM ANDAMENTO: $texto"
+}
+
+# SHA-256 pelo .NET: o Get-FileHash às vezes não carrega quando o PowerShell 5.1
+# é aberto a partir do PowerShell 7 (caso comum com agentes).
+function HashSha256($arquivo) {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    $fluxo = [IO.File]::OpenRead($arquivo)
+    try { return ([BitConverter]::ToString($sha.ComputeHash($fluxo))).Replace('-', '') }
+    finally { $fluxo.Dispose(); $sha.Dispose() }
+}
 
 function Baixar($item, $destino) {
     if (Test-Path $destino) {
-        if ((Get-FileHash $destino -Algorithm SHA256).Hash -eq $item.sha) { Write-Host "    já baixado"; return }
+        if ((HashSha256 $destino) -eq $item.sha) { Write-Host "    já baixado"; return }
         Remove-Item $destino -Force
     }
     Write-Host "    baixando $($item.url)"
+    Progresso "EM ANDAMENTO: baixando $(Split-Path $destino -Leaf) (o arquivo parcial cresce em $destino.parcial)"
     & curl.exe -L --fail --retry 3 --progress-bar -o "$destino.parcial" $item.url
     if ($LASTEXITCODE -ne 0) { throw "Falha ao baixar $($item.url)" }
-    $hash = (Get-FileHash "$destino.parcial" -Algorithm SHA256).Hash
+    $hash = HashSha256 "$destino.parcial"
     if ($hash -ne $item.sha) {
         Remove-Item "$destino.parcial" -Force
         throw "O arquivo baixado de $($item.url) não confere (SHA-256 $hash). Instalação interrompida por segurança."
@@ -52,6 +94,8 @@ function Extrair($zip, $pasta, $exe) {
     Copy-Item (Join-Path $achado.DirectoryName '*') $pasta -Recurse -Force
     Remove-Item $tmp -Recurse -Force
 }
+
+try {
 
 Passo 'Conferindo o computador'
 if (-not [Environment]::Is64BitOperatingSystem) { throw 'O Transcreve Zap precisa de Windows 64 bits.' }
@@ -75,6 +119,8 @@ $Node = Join-Path $Raiz 'ferramentas\node\node.exe'
 $Npm = Join-Path $Raiz 'ferramentas\node\npm.cmd'
 
 Passo 'Bibliotecas do programa'
+# Se o programa já estiver aberto (reinstalação), ele prende arquivos e o npm falha.
+& (Join-Path $Raiz 'parar.ps1') | Out-Null
 $env:Path = (Join-Path $Raiz 'ferramentas\node') + ';' + $env:Path
 & $Npm ci --omit=dev --no-audit --no-fund
 if ($LASTEXITCODE -ne 0) { throw 'Falha ao instalar as bibliotecas (npm ci).' }
@@ -116,11 +162,34 @@ Write-Host '    atalho criado na pasta Inicializar do usuário'
 
 Remove-Item $Baixados -Recurse -Force
 
-if (-not $NaoIniciar) {
-    Passo 'Abrindo o programa'
-    Start-Process wscript.exe -ArgumentList ('"' + (Join-Path $Raiz 'iniciar-oculto.vbs') + '"') -WorkingDirectory $Raiz
-    Start-Sleep -Seconds 4
-    Start-Process "http://localhost:$($cfg.porta_painel)"
+$painel = "http://localhost:$($cfg.porta_painel)"
+if ($NaoIniciar) {
+    Progresso "PRONTO: instalado, mas não iniciado (-NaoIniciar). Para abrir: iniciar-oculto.vbs"
+    Write-Host "`nInstalado. Para abrir, dê dois cliques em iniciar-oculto.vbs." -ForegroundColor Green
+} else {
+
+Passo 'Abrindo o programa'
+Start-Process wscript.exe -ArgumentList ('"' + (Join-Path $Raiz 'iniciar-oculto.vbs') + '"') -WorkingDirectory $Raiz
+# Só diz "pronto" depois que o painel responder de verdade.
+$estado = $null
+for ($i = 0; $i -lt 60 -and -not $estado; $i++) {
+    Start-Sleep -Seconds 1
+    try { $estado = Invoke-RestMethod "http://127.0.0.1:$($cfg.porta_painel)/estado" -TimeoutSec 2 } catch {}
+}
+if (-not $estado) {
+    $log = Join-Path $Dados 'transcreve-zap.log'
+    $fim = if (Test-Path $log) { (Get-Content $log -Tail 15) -join "`n" } else { '(sem log)' }
+    throw "O programa não abriu. Últimas linhas do log:`n$fim"
+}
+Start-Process $painel
+
+Progresso "PRONTO: programa rodando. Painel em $painel (status: $($estado.status))"
+Write-Host "`nPronto! Abra $painel e escaneie o QR Code com o WhatsApp do celular." -ForegroundColor Green
 }
 
-Write-Host "`nPronto! Abra http://localhost:$($cfg.porta_painel) e escaneie o QR Code com o WhatsApp do celular." -ForegroundColor Green
+} catch {
+    Progresso "ERRO: $($_.Exception.Message)"
+    throw
+} finally {
+    Remove-Item $Trava -Force -ErrorAction SilentlyContinue
+}

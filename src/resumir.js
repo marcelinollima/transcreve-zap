@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
 import { LLAMA_EXE, PASTA_MODELOS, log } from './config.js'
+import { prioridadeBaixa } from './transcrever.js'
 
 const PORTA = 3211
 const DESLIGAR_APOS_MS = 10 * 60 * 1000
@@ -31,6 +32,7 @@ async function garantirServidor (config) {
       '-m', modelo, '--host', '127.0.0.1', '--port', String(PORTA),
       '-c', '4096', '-t', String(config.threads), '--no-webui'
     ], { windowsHide: true, stdio: 'ignore' })
+    prioridadeBaixa(processo.pid)
     processo.on('exit', () => { processo = null })
     const limite = Date.now() + 180_000
     while (Date.now() < limite) {

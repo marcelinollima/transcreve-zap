@@ -1,19 +1,23 @@
 // Transcreve Zap: escuta o WhatsApp, transcreve áudios no próprio PC e
 // devolve o texto (com resumo quando o áudio é longo).
 import fs from 'node:fs'
+import path from 'node:path'
 import pino from 'pino'
 import {
   makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers,
   fetchLatestBaileysVersion, downloadMediaMessage, normalizeMessageContent,
   jidNormalizedUser, isJidGroup, isJidBroadcast, isJidNewsletter, isJidStatusBroadcast
 } from 'baileys'
-import { carregarConfig, log, PASTA_SESSAO } from './config.js'
+import { carregarConfig, log, PASTA_SESSAO, DADOS } from './config.js'
 import { transcrever } from './transcrever.js'
 import { resumir, desligarResumo } from './resumir.js'
 import { estado, iniciarPainel } from './painel.js'
 
 const config = carregarConfig()
-const logger = pino({ level: 'silent' })
+// "log_detalhado": true no config.json grava o log interno do WhatsApp em dados\whatsapp-debug.log.
+const logger = config.log_detalhado
+  ? pino({ level: 'debug' }, pino.destination(path.join(DADOS, 'whatsapp-debug.log')))
+  : pino({ level: 'silent' })
 
 // Um áudio por vez: transcrever e resumir usam bastante CPU.
 let fila = Promise.resolve()
@@ -22,10 +26,9 @@ const enfileirar = tarefa => { fila = fila.then(tarefa).catch(() => {}) }
 const contarPalavras = t => t.split(/\s+/).filter(Boolean).length
 
 function montarTexto ({ remetente, texto, resumo, privado }) {
-  const partes = []
-  partes.push(privado ? `🎙️ *Áudio de ${remetente}*` : '🤖 *Transcrição automática*')
+  const titulo = privado ? `🎙️ *Transcrição do áudio de ${remetente}*` : '🤖 *Transcrição automática do áudio*'
+  const partes = [`${titulo}\n${texto}`]
   if (resumo) partes.push(`*Resumo*\n${resumo}`)
-  partes.push(resumo ? `*Transcrição*\n${texto}` : texto)
   return partes.join('\n\n')
 }
 
@@ -51,10 +54,10 @@ async function processarAudio (sock, msg) {
   const privado = config.modo_resposta !== 'conversa'
   const destino = privado ? jidNormalizedUser(sock.user.id) : chat
   const opcoes = privado ? {} : { quoted: msg }
-  await sock.sendMessage(destino, { text: montarTexto({ remetente, texto, resumo, privado }) }, opcoes)
+  const enviada = await sock.sendMessage(destino, { text: montarTexto({ remetente, texto, resumo, privado }) }, opcoes)
 
   estado.transcritos++
-  log(`Transcrito em ${((Date.now() - inicio) / 1000).toFixed(1)}s (${contarPalavras(texto)} palavras${resumo ? ', com resumo' : ''})`)
+  log(`Enviado para ${destino} (id ${enviada?.key?.id}). Transcrito em ${((Date.now() - inicio) / 1000).toFixed(1)}s (${contarPalavras(texto)} palavras${resumo ? ', com resumo' : ''})`)
 }
 
 function deveTranscrever (sock, msg) {

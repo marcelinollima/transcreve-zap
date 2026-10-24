@@ -4,34 +4,43 @@ Se a pessoa pediu para **instalar** o Transcreve Zap, siga exatamente estes pass
 Não improvise outra forma de instalar e não altere o código.
 
 1. Confira que é Windows 10 ou 11, 64 bits. Em outro sistema, avise que só Windows é suportado e pare.
-2. Na pasta deste repositório, rode:
+2. Na pasta deste repositório, rode o instalador **uma vez só**, em segundo plano:
 
    ```powershell
-   powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar.ps1
+   Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','.\instalar.ps1' -WorkingDirectory (Get-Location)
    ```
 
-   O download tem cerca de 3 GB (modelos de transcrição e de resumo) e pode levar
-   alguns minutos. Use um timeout longo (10 min ou mais) ou rode em segundo plano.
+   Ele baixa cerca de 2,6 GB (modelos de transcrição e de resumo) e leva vários
+   minutos. Não espere o comando terminar e **nunca rode o instalador de novo
+   enquanto o primeiro estiver em andamento**: duas instalações juntas corrompem
+   as bibliotecas (o script recusa a segunda, mas não tente).
    O script não pede administrador e confere o SHA-256 de cada download.
+3. Acompanhe pelo arquivo `dados\instalacao.txt`, lendo de 30 em 30 segundos:
+   - `EM ANDAMENTO: ...` mostra a etapa atual. Durante um download, o arquivo
+     `.parcial` indicado cresce até o tamanho final.
+   - `PRONTO: ...` significa que terminou e o painel já respondeu.
+   - `ERRO: ...` traz o motivo. Mostre à pessoa; não tente consertar mudando o código.
    - Com menos de 8 GB de RAM ele instala sem resumo, sozinho.
    - O padrão é o Whisper `small`. Se o PC for recente e potente (8 núcleos
      ou mais) e a pessoa quiser mais precisão, acrescente `-ModeloMelhor`.
-3. No final o script abre `http://localhost:3210` no navegador. Diga à pessoa:
+4. No final o script abre `http://localhost:3210` no navegador. Diga à pessoa:
    "Abra o WhatsApp no celular, vá em ⋮ > Dispositivos conectados > Conectar
    dispositivo e aponte para o QR Code que abriu no navegador."
-4. Confirme a conexão consultando `http://localhost:3210/estado` até `status`
+5. Confirme a conexão consultando `http://localhost:3210/estado` até `status`
    virar `conectado` (espere até 2 minutos).
-5. Explique em poucas linhas:
-   - Os áudios recebidos são transcritos neste PC e o texto chega em
-     **"Mensagens para mim"** (conversa com o próprio número). O contato não vê nada.
-   - Para responder na própria conversa (o contato vê), mude `modo_resposta`
-     para `"conversa"` em `config.json` e reinicie (`parar.ps1` e depois
-     `iniciar-oculto.vbs`).
+6. Explique em poucas linhas:
+   - Os áudios recebidos são transcritos neste PC e a transcrição chega na
+     própria conversa, respondendo ao áudio. O contato também vê.
+   - Para que só a pessoa veja, mude `modo_resposta` para `"privado"` em
+     `config.json` (vai para "Mensagens para mim") e reinicie (`parar.ps1` e
+     depois `iniciar-oculto.vbs`).
    - O PC precisa estar ligado. O programa inicia junto com o Windows.
 
 ## Problemas comuns
 
 - Log em `dados\transcreve-zap.log`.
+- Abra o programa sempre pelo `iniciar-oculto.vbs`, nunca rodando o `node.exe`
+  direto: assim ele fica sem janela, e fechar a janela não desliga o programa.
 - "já está rodando": o programa já está aberto; use o painel em `http://localhost:3210`.
 - Para reconectar do zero: `parar.ps1`, apague `dados\sessao-whatsapp`, rode `iniciar-oculto.vbs`.
 - Para remover: `desinstalar.ps1`.
