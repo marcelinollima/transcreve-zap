@@ -1,8 +1,10 @@
 {
   "modo_resposta": "conversa",
   "grupos": false,
-  "limite_palavras_resumo": 10,
+  "limite_palavras_resumo": 20,
   "resumo": true,
+  "resumo_onde": "servidor",
+  "servidor_resumo": "https://resumo.nanx.com.br",
   "modelo_whisper": "ggml-small.bin",
   "modelo_resumo": "qwen2.5-3b-instruct-q4_k_m.gguf",
   "idade_maxima_horas": 12,

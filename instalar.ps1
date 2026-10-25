@@ -1,9 +1,10 @@
 ﻿# Instalador do Transcreve Zap (Windows 10/11, 64 bits).
 # Não precisa de administrador: tudo fica dentro desta pasta.
-# Uso: powershell -ExecutionPolicy Bypass -File instalar.ps1 [-SemResumo] [-ModeloMelhor] [-NaoIniciar]
+# Uso: powershell -ExecutionPolicy Bypass -File instalar.ps1 [-ResumoLocal] [-SemResumo] [-ModeloMelhor] [-NaoIniciar]
 
 param(
-    [switch]$SemResumo,     # não baixa o modelo de resumo (economiza ~2 GB e memória)
+    [switch]$ResumoLocal,   # resume no próprio PC em vez do servidor (baixa mais ~2 GB, precisa de 8 GB de memória)
+    [switch]$SemResumo,     # desliga o resumo: só transcreve
     [switch]$ModeloMelhor,  # usa o Whisper "large-v3-turbo": erra menos, mas é ~3x mais lento que o "small"
     [switch]$NaoIniciar     # só instala, não abre o programa no final
 )
@@ -102,10 +103,11 @@ if (-not [Environment]::Is64BitOperatingSystem) { throw 'O Transcreve Zap precis
 $ramGB = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
 $livreGB = [math]::Round((Get-PSDrive ($Raiz.Substring(0,1))).Free / 1GB)
 Write-Host "    memória: $ramGB GB | espaço livre: $livreGB GB"
-if ($livreGB -lt 5) { throw 'São necessários pelo menos 5 GB livres no disco.' }
-if ($ramGB -lt 8 -and -not $SemResumo) {
-    Write-Host '    Menos de 8 GB de memória: instalando sem o resumo (só transcrição).' -ForegroundColor Yellow
-    $SemResumo = $true
+$minimoGB = if ($ResumoLocal) { 5 } else { 2 }
+if ($livreGB -lt $minimoGB) { throw "São necessários pelo menos $minimoGB GB livres no disco." }
+if ($ResumoLocal -and $ramGB -lt 8) {
+    Write-Host '    Menos de 8 GB de memória: o resumo vai ser feito no servidor, não no PC.' -ForegroundColor Yellow
+    $ResumoLocal = $false
 }
 
 $Baixados = Join-Path $Raiz 'ferramentas\downloads'
@@ -132,7 +134,7 @@ $modeloWhisper = if ($ModeloMelhor) { $Downloads.turbo } else { $Downloads.small
 Write-Host "    modelo: $($modeloWhisper.arquivo)"
 Baixar $modeloWhisper (Join-Path $Modelos $modeloWhisper.arquivo)
 
-if (-not $SemResumo) {
+if ($ResumoLocal -and -not $SemResumo) {
     Passo 'Modelo de resumo (local, ~2 GB)'
     Baixar $Downloads.llama (Join-Path $Baixados 'llama.zip')
     Extrair (Join-Path $Baixados 'llama.zip') (Join-Path $Raiz 'ferramentas\llama') 'llama-server.exe'
@@ -141,13 +143,31 @@ if (-not $SemResumo) {
 
 Passo 'Configuração'
 $arqConfig = Join-Path $Raiz 'config.json'
+$exemplo = Get-Content (Join-Path $Raiz 'config.exemplo.json') -Raw -Encoding UTF8 | ConvertFrom-Json
 if (Test-Path $arqConfig) {
     $cfg = Get-Content $arqConfig -Raw -Encoding UTF8 | ConvertFrom-Json
+    # Opções novas que o config.json antigo não tem vêm do exemplo
+    # (menos resumo_onde, decidido logo abaixo).
+    foreach ($p in $exemplo.PSObject.Properties) {
+        if ($p.Name -ne 'resumo_onde' -and -not $cfg.PSObject.Properties[$p.Name]) {
+            $cfg | Add-Member -NotePropertyName $p.Name -NotePropertyValue $p.Value
+        }
+    }
 } else {
-    $cfg = Get-Content (Join-Path $Raiz 'config.exemplo.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $cfg = $exemplo
+    $cfg.PSObject.Properties.Remove('resumo_onde')
 }
 $cfg.modelo_whisper = $modeloWhisper.arquivo
 $cfg.resumo = -not $SemResumo
+# Onde resumir. Sem -ResumoLocal, mantém o que já estava escolhido; numa
+# instalação antiga que já tem o modelo local, continua no PC.
+$ondeAtual = $cfg.PSObject.Properties['resumo_onde']
+$onde = if ($ResumoLocal) { 'local' }
+        elseif ($ondeAtual) { $ondeAtual.Value }
+        elseif (Test-Path (Join-Path $Modelos $Downloads.qwen.arquivo)) { 'local' }
+        else { 'servidor' }
+$cfg | Add-Member -Force -NotePropertyName resumo_onde -NotePropertyValue $onde
+Write-Host "    resumo: $(if ($SemResumo) { 'desligado' } else { $onde })"
 [IO.File]::WriteAllText($arqConfig, ($cfg | ConvertTo-Json), (New-Object Text.UTF8Encoding $false))
 Write-Host "    $arqConfig"
 

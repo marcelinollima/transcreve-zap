@@ -10,6 +10,7 @@ export const PASTA_SESSAO = path.join(DADOS, 'sessao-whatsapp')
 export const PASTA_TEMP = path.join(DADOS, 'temp')
 export const ARQ_LOG = path.join(DADOS, 'transcreve-zap.log')
 export const ARQ_CONFIG = path.join(RAIZ, 'config.json')
+export const ARQ_ID_INSTALACAO = path.join(DADOS, 'id-instalacao.txt')
 
 export const WHISPER_EXE = path.join(RAIZ, 'ferramentas', 'whisper', 'whisper-cli.exe')
 export const LLAMA_EXE = path.join(RAIZ, 'ferramentas', 'llama', 'llama-server.exe')
@@ -22,9 +23,13 @@ const PADRAO = {
   // Transcrever áudios recebidos em grupos.
   grupos: false,
   // Só gera resumo quando a transcrição passa deste número de palavras.
-  limite_palavras_resumo: 10,
+  limite_palavras_resumo: 20,
   // Liga/desliga o resumo (a transcrição continua).
   resumo: true,
+  // "servidor": manda só o texto transcrito para o servidor de resumo.
+  // "local": resume no próprio PC (precisa do modelo, instalar com -ResumoLocal).
+  resumo_onde: 'servidor',
+  servidor_resumo: 'https://resumo.nanx.com.br',
   modelo_whisper: 'ggml-small.bin',
   modelo_resumo: 'qwen2.5-3b-instruct-q4_k_m.gguf',
   // Áudios mais velhos que isso (ex.: chegaram com o PC desligado) são ignorados.
@@ -38,6 +43,12 @@ export function carregarConfig () {
   let doArquivo = {}
   if (fs.existsSync(ARQ_CONFIG)) {
     doArquivo = JSON.parse(fs.readFileSync(ARQ_CONFIG, 'utf8').replace(/^﻿/, ''))
+  }
+  // Instalação antiga, de antes do resumo no servidor: se o modelo local
+  // existe, continua resumindo no PC em vez de passar a mandar texto para fora.
+  if (doArquivo.resumo_onde === undefined) {
+    const modelo = path.join(PASTA_MODELOS, doArquivo.modelo_resumo || PADRAO.modelo_resumo)
+    if (fs.existsSync(modelo)) doArquivo.resumo_onde = 'local'
   }
   return { ...PADRAO, ...doArquivo }
 }

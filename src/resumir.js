@@ -1,11 +1,16 @@
-// Resumo com um modelo pequeno rodando no próprio PC (llama.cpp).
-// O servidor do modelo só sobe quando chega o primeiro áudio longo e
-// desliga sozinho depois de um tempo parado, para não segurar memória à toa.
+// Resumo da transcrição. Dois jeitos (config "resumo_onde"):
+// - "servidor": manda só o texto para o servidor de resumo (servidor/servidor.js).
+//   O áudio e a sessão do WhatsApp nunca saem do PC.
+// - "local": modelo pequeno rodando no próprio PC (llama.cpp). O servidor do
+//   modelo só sobe quando chega o primeiro áudio longo e desliga sozinho depois
+//   de um tempo parado, para não segurar memória à toa.
 import fs from 'node:fs'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { spawn } from 'node:child_process'
-import { LLAMA_EXE, PASTA_MODELOS, log } from './config.js'
+import { LLAMA_EXE, PASTA_MODELOS, ARQ_ID_INSTALACAO, log } from './config.js'
 import { prioridadeBaixa } from './transcrever.js'
+import { mensagensResumo } from './prompt-resumo.js'
 
 const PORTA = 3211
 const DESLIGAR_APOS_MS = 10 * 60 * 1000
@@ -55,28 +60,13 @@ export function desligarResumo () {
   if (processo) { processo.kill(); processo = null }
 }
 
-export async function resumir (texto, remetente, config) {
+async function resumirLocal (texto, remetente, config) {
   await garantirServidor(config)
   try {
     const r = await fetch(`http://127.0.0.1:${PORTA}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        temperature: 0.2,
-        max_tokens: 200,
-        messages: [
-          {
-            role: 'system',
-            content: 'Você resume, para o dono do celular, áudios de WhatsApp que outras pessoas mandaram para ele. ' +
-              'Escreva em português do Brasil, na terceira pessoa, começando pelo nome de quem mandou o áudio. ' +
-              'Use de 1 a 3 frases curtas com o que a pessoa avisou ou pediu. ' +
-              'Mantenha nomes, datas, horários e valores. Não cumprimente, não responda ao áudio, não invente nada, não use listas.\n\n' +
-              'Exemplo de áudio de Carlos: "Fala, beleza? Seguinte, não vou conseguir ir amanhã, meu carro quebrou. Vê se dá pra remarcar pra quinta de manhã."\n' +
-              'Exemplo de resumo: Carlos não vai conseguir ir amanhã porque o carro quebrou e pede para remarcar para quinta de manhã.'
-          },
-          { role: 'user', content: `Áudio de ${remetente}: "${texto}"\n\nResumo:` }
-        ]
-      })
+      body: JSON.stringify({ temperature: 0.2, max_tokens: 200, messages: mensagensResumo(texto, remetente) })
     })
     if (!r.ok) throw new Error(`modelo de resumo respondeu ${r.status}`)
     const j = await r.json()
@@ -84,4 +74,32 @@ export async function resumir (texto, remetente, config) {
   } finally {
     agendarDesligamento()
   }
+}
+
+// Id aleatório desta instalação, para o servidor limitar o uso por PC.
+// Não identifica a pessoa nem o número de WhatsApp.
+function idInstalacao () {
+  try { return fs.readFileSync(ARQ_ID_INSTALACAO, 'utf8').trim() } catch {}
+  const id = crypto.randomUUID()
+  fs.writeFileSync(ARQ_ID_INSTALACAO, id)
+  return id
+}
+
+async function resumirNoServidor (texto, remetente, config) {
+  if (!config.servidor_resumo) throw new Error('servidor_resumo não configurado no config.json')
+  const r = await fetch(`${config.servidor_resumo.replace(/\/$/, '')}/resumir`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idInstalacao()}` },
+    body: JSON.stringify({ texto, remetente }),
+    signal: AbortSignal.timeout(90_000)
+  })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(`servidor de resumo respondeu ${r.status}${j.erro ? ` (${j.erro})` : ''}`)
+  return (j.resumo || '').trim()
+}
+
+export function resumir (texto, remetente, config) {
+  return config.resumo_onde === 'local'
+    ? resumirLocal(texto, remetente, config)
+    : resumirNoServidor(texto, remetente, config)
 }

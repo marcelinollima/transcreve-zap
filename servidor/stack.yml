@@ -1,0 +1,41 @@
+# Servidor de resumo do Transcreve Zap (repo marcelinollima/transcreve-zap, pasta servidor/).
+# Deploy (em /opt/transcreve-zap): DOMINIO=resumo.nanx.com.br docker stack deploy -c servidor/stack.yml transcreve
+version: "3.7"
+services:
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp@sha256:1fa7f8f0ca663fdcf3203dc125a7e0b5c9e49c9ed054b049599666cd7e300eb0
+    command: ["-m", "/modelos/qwen2.5-3b-instruct-q4_k_m.gguf", "--host", "0.0.0.0", "--port", "8080",
+              "-c", "2048", "-np", "1", "-t", "3", "--no-webui"]
+    volumes:
+      - /opt/transcreve-zap/modelos:/modelos:ro
+    networks: [interna]
+    deploy:
+      resources:
+        limits: { cpus: "3", memory: 2800M }
+      restart_policy: { condition: any }
+  resumo:
+    image: node:20-alpine
+    command: ["node", "/app/servidor/servidor.js"]
+    working_dir: /app
+    environment:
+      PORTA: "3220"
+      LLAMA_URL: http://llama:8080
+      CONFIAR_PROXY: "1"
+    volumes:
+      - /opt/transcreve-zap/servidor:/app/servidor:ro
+      - /opt/transcreve-zap/src:/app/src:ro
+    networks: [interna, nanx]
+    deploy:
+      resources:
+        limits: { memory: 128M }
+      restart_policy: { condition: any }
+      labels:
+        - traefik.enable=true
+        - traefik.http.routers.transcreve_resumo.rule=Host(`${DOMINIO}`)
+        - traefik.http.routers.transcreve_resumo.entrypoints=websecure
+        - traefik.http.routers.transcreve_resumo.tls.certresolver=letsencryptresolver
+        - traefik.http.services.transcreve_resumo.loadbalancer.server.port=3220
+networks:
+  interna:
+  nanx:  # rede do Traefik nessa VPS
+    external: true

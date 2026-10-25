@@ -10,8 +10,10 @@ Não improvise outra forma de instalar e não altere o código.
    Start-Process powershell -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','.\instalar.ps1' -WorkingDirectory (Get-Location)
    ```
 
-   Ele baixa cerca de 2,6 GB (modelos de transcrição e de resumo) e leva vários
-   minutos. Não espere o comando terminar e **nunca rode o instalador de novo
+   Ele baixa cerca de 600 MB (modelo de transcrição) e leva alguns minutos.
+   O resumo é feito no servidor de resumo, recebendo só o texto transcrito.
+   Se a pessoa pedir que nada saia do PC, acrescente `-ResumoLocal` (baixa mais
+   ~2 GB e precisa de 8 GB de RAM; com menos, o script volta para o servidor). Não espere o comando terminar e **nunca rode o instalador de novo
    enquanto o primeiro estiver em andamento**: duas instalações juntas corrompem
    as bibliotecas (o script recusa a segunda, mas não tente).
    O script não pede administrador e confere o SHA-256 de cada download.
@@ -20,7 +22,6 @@ Não improvise outra forma de instalar e não altere o código.
      `.parcial` indicado cresce até o tamanho final.
    - `PRONTO: ...` significa que terminou e o painel já respondeu.
    - `ERRO: ...` traz o motivo. Mostre à pessoa; não tente consertar mudando o código.
-   - Com menos de 8 GB de RAM ele instala sem resumo, sozinho.
    - O padrão é o Whisper `small`. Se o PC for recente e potente (8 núcleos
      ou mais) e a pessoa quiser mais precisão, acrescente `-ModeloMelhor`.
 4. No final o script abre `http://localhost:3210` no navegador. Diga à pessoa:
@@ -31,6 +32,8 @@ Não improvise outra forma de instalar e não altere o código.
 6. Explique em poucas linhas:
    - Os áudios recebidos são transcritos neste PC e a transcrição chega na
      própria conversa, respondendo ao áudio. O contato também vê.
+   - Para áudios longos, só o texto vai para o servidor de resumo, que devolve
+     o resumo sem guardar nada. O áudio não sai do PC.
    - Para que só a pessoa veja, mude `modo_resposta` para `"privado"` em
      `config.json` (vai para "Mensagens para mim") e reinicie (`parar.ps1` e
      depois `iniciar-oculto.vbs`).
@@ -49,5 +52,7 @@ Não improvise outra forma de instalar e não altere o código.
 
 - Node.js (ESM), entrada em `src/index.js`. WhatsApp via Baileys, transcrição com
   whisper.cpp (`src/transcrever.js`), resumo com llama.cpp (`src/resumir.js`).
-- Nada sai do computador além da conexão com o WhatsApp. Não adicione chamadas a
-  APIs externas sem deixar isso desligado por padrão e documentado.
+- O áudio e a sessão do WhatsApp nunca saem do computador. A única chamada
+  externa (além do WhatsApp) é o texto transcrito indo para o servidor de resumo
+  (`servidor/`), e `resumo_onde: "local"` desliga até isso. Não adicione outras
+  chamadas externas sem deixar desligado por padrão e documentado.
